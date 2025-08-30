@@ -2,7 +2,7 @@
 {
     public static void Main()
     {
-        using var window = new VentanaPrincipal();
-        window.Run();
+        using var w = new VentanaPrincipal();
+        w.Run();
     }
 }
