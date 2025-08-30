@@ -21,13 +21,13 @@ public class VentanaPrincipal : GameWindow
     private float _lastX, _lastY;
     private Matrix4 _view, _proj;
 
-    // Escena (jerarquía que pide tu profe)
+    // Escena
     private readonly List<Objeto> _objetos = new();
 
     public VentanaPrincipal()
         : base(GameWindowSettings.Default, new NativeWindowSettings
         {
-            Title = "Objeto → Parte → Cara → Vértice → Punto",
+            Title = "Objeto → Parte → Poligono → Punto (con Centro de Masa)",
             Size = new Vector2i(1000, 800)
         })
     { }
@@ -67,7 +67,7 @@ public class VentanaPrincipal : GameWindow
         GL.LinkProgram(_program);
         GL.DeleteShader(vs); GL.DeleteShader(fs);
 
-        // Un VAO/VBO para subir triángulos por cara
+        // VAO/VBO dinámico (subimos polígonos triangulados por draw)
         _vao = GL.GenVertexArray();
         _vbo = GL.GenBuffer();
         GL.BindVertexArray(_vao);
@@ -80,108 +80,167 @@ public class VentanaPrincipal : GameWindow
         _proj = Matrix4.CreatePerspectiveFieldOfView(MathHelper.DegreesToRadians(45f), Size.X / (float)Size.Y, 0.1f, 100f);
         CursorState = CursorState.Grabbed;
 
-        // ======== CONSTRUIR LA PC EN EL GAME (jerarquía) ========
-        ConstruirEscenaPC();
+        // ===== Construir objetos en el Game =====
+        ConstruirPC();
     }
 
-    private void ConstruirEscenaPC()
+    private void ConstruirPC()
     {
-        // MONITOR (marco + pantalla + soporte + base)
-        var monitor = new Objeto("Monitor") { Transform = Matrix4.CreateTranslation(0f, 3.2f, -1.5f) };
-        monitor.Partes.Add(CrearParteCaja(new Vector3(3.8f, 2.5f, 0.3f), new Vector4(0.2f, 0.2f, 0.2f, 1f)));              // marco
-        monitor.Partes.Add(CrearParteCajaEnOffset(new Vector3(3.4f, 2.0f, 0.1f), new Vector3(0, 0, +0.11f), new Vector4(0, 0, 0, 1f))); // pantalla
-        monitor.Partes.Add(CrearParteCajaEnOffset(new Vector3(0.25f, 1.2f, 0.25f), new Vector3(0, -1.8f, 0), new Vector4(0.3f, 0.3f, 0.3f, 1f))); // soporte
-        monitor.Partes.Add(CrearParteCajaEnOffset(new Vector3(1.5f, 0.2f, 1.0f), new Vector3(0, -2.5f, 0), new Vector4(0.2f, 0.2f, 0.2f, 1f)));   // base
+        // MONITOR (objeto)
+        var monitor = new Objeto("Monitor") { Posicion = new Vector3(0f, 3.0f, -1.5f) };
+
+        // Parte: marco (caja)
+        monitor.Partes.Add(CrearParteCaja(
+            size: new Vector3(3.8f, 2.5f, 0.3f),
+            color: new Vector4(0.2f, 0.2f, 0.2f, 1f),
+            posicionLocal: Vector3.Zero
+        ));
+
+        // Parte: pantalla
+        monitor.Partes.Add(CrearParteCaja(
+            size: new Vector3(3.4f, 2.0f, 0.1f),
+            color: new Vector4(0f, 0f, 0f, 1f),
+            posicionLocal: new Vector3(0, 0, +0.11f)
+        ));
+
+        // Parte: soporte vertical
+        monitor.Partes.Add(CrearParteCaja(
+            size: new Vector3(0.25f, 1.2f, 0.25f),
+            color: new Vector4(0.3f, 0.3f, 0.3f, 1f),
+            posicionLocal: new Vector3(0, -1.7f, 0)
+        ));
+
+        // Parte: base
+        monitor.Partes.Add(CrearParteCaja(
+            size: new Vector3(1.5f, 0.2f, 1.0f),
+            color: new Vector4(0.2f, 0.2f, 0.2f, 1f),
+            posicionLocal: new Vector3(0, -2.4f, 0)
+        ));
+
         _objetos.Add(monitor);
 
-        // TECLADO (base + “zona de teclas” como bloque simple)
-        var teclado = new Objeto("Teclado") { Transform = Matrix4.CreateTranslation(0f, 0.5f, 2.5f) };
-        teclado.Partes.Add(CrearParteCaja(new Vector3(3.0f, 0.2f, 1.2f), new Vector4(0.1f, 0.1f, 0.1f, 1f)));                          // base
-        teclado.Partes.Add(CrearParteCajaEnOffset(new Vector3(2.6f, 0.1f, 1.0f), new Vector3(0, +0.15f, 0), new Vector4(0.6f, 0.6f, 0.6f, 1f))); // teclas simplificadas
+        // TECLADO (objeto)
+        var teclado = new Objeto("Teclado") { Posicion = new Vector3(0f, 0.5f, 2.5f) };
+        // base
+        teclado.Partes.Add(CrearParteCaja(
+            new Vector3(3.0f, 0.2f, 1.2f),
+            new Vector4(0.1f, 0.1f, 0.1f, 1f),
+            Vector3.Zero
+        ));
+        // bloque teclas
+        teclado.Partes.Add(CrearParteCaja(
+            new Vector3(2.6f, 0.1f, 1.0f),
+            new Vector4(0.6f, 0.6f, 0.6f, 1f),
+            new Vector3(0, +0.15f, 0)
+        ));
         _objetos.Add(teclado);
 
-        // MOUSE (cuerpo + “scroll”)
-        var mouse = new Objeto("Mouse") { Transform = Matrix4.CreateTranslation(2.5f, 0.5f, 2.5f) };
-        mouse.Partes.Add(CrearParteCaja(new Vector3(0.5f, 0.2f, 0.9f), new Vector4(0.25f, 0.25f, 0.25f, 1f)));                          // cuerpo
-        mouse.Partes.Add(CrearParteCajaEnOffset(new Vector3(0.1f, 0.05f, 0.3f), new Vector3(0, +0.15f, 0), new Vector4(0.1f, 0.1f, 0.1f, 1f)));   // scroll
+        // MOUSE (objeto)
+        var mouse = new Objeto("Mouse") { Posicion = new Vector3(2.4f, 0.5f, 2.5f) };
+        mouse.Partes.Add(CrearParteCaja(
+            new Vector3(0.5f, 0.2f, 0.9f),
+            new Vector4(0.25f, 0.25f, 0.25f, 1f),
+            Vector3.Zero
+        ));
+        mouse.Partes.Add(CrearParteCaja(
+            new Vector3(0.1f, 0.05f, 0.3f),
+            new Vector4(0.1f, 0.1f, 0.1f, 1f),
+            new Vector3(0, +0.15f, 0)
+        ));
         _objetos.Add(mouse);
 
-        // CASE (frente a Z+, ventana lateral, bisel)
-        var casePc = new Objeto("Case") { Transform = Matrix4.CreateTranslation(-3f, 1.5f, -1.5f) };
-        casePc.Partes.Add(CrearParteCaja(new Vector3(1.8f, 3.6f, 2.2f), new Vector4(0.10f, 0.10f, 0.10f, 1f)));                                  // chasis
-        casePc.Partes.Add(CrearParteCajaEnOffset(new Vector3(1.4f, 2.6f, 0.06f), new Vector3(+0.1f, 0f, +1.1f - 0.05f), new Vector4(0.30f, 0.30f, 0.30f, 1f))); // ventana
-        casePc.Partes.Add(CrearParteCajaEnOffset(new Vector3(1.84f, 3.6f, 0.08f), new Vector3(0f, 0f, +1.1f + 0.04f), new Vector4(0.18f, 0.18f, 0.18f, 1f)));   // bisel frontal
+        // CASE (objeto) – frente a Z+
+        var casePc = new Objeto("Case") { Posicion = new Vector3(-3f, 1.5f, -1.5f) };
+        casePc.Partes.Add(CrearParteCaja(
+            new Vector3(1.8f, 3.6f, 2.2f),
+            new Vector4(0.10f, 0.10f, 0.10f, 1f),
+            Vector3.Zero
+        ));
+        // ventana lateral (Z+)
+        casePc.Partes.Add(CrearParteCaja(
+            new Vector3(1.4f, 2.6f, 0.06f),
+            new Vector4(0.30f, 0.30f, 0.30f, 1f),
+            new Vector3(+0.1f, 0f, +1.1f - 0.05f)
+        ));
+        // bisel frontal (Z+)
+        casePc.Partes.Add(CrearParteCaja(
+            new Vector3(1.84f, 3.6f, 0.08f),
+            new Vector4(0.18f, 0.18f, 0.18f, 1f),
+            new Vector3(0f, 0f, +1.1f + 0.04f)
+        ));
         _objetos.Add(casePc);
+
+        // (Opcional) Podés imprimir centros de masa para mostrar al profe:
+        // foreach (var obj in _objetos)
+        //     Console.WriteLine($"{obj.Nombre} - Centro de masa: {obj.CentroDeMasa()}");
     }
 
-    // ==== Helpers PRIVADOS dentro del Game (no son nuevas clases) ====
-    private Parte CrearParteCaja(Vector3 size, Vector4 color)
-        => CrearParteCajaEnOffset(size, Vector3.Zero, color);
-
-    private Parte CrearParteCajaEnOffset(Vector3 size, Vector3 offset, Vector4 color)
+    // ====== Helpers PRIVADOS dentro del Game (no son clases nuevas) ======
+    // Crea una PARTE tipo “caja” con 6 polígonos (cada cara = cuadrilátero de 4 puntos),
+    // posicionado a 'posicionLocal' respecto al Objeto que la contiene.
+    private Parte CrearParteCaja(Vector3 size, Vector4 color, Vector3 posicionLocal)
     {
-        var parte = new Parte { Color = color };
+        var parte = new Parte { Color = color, Posicion = posicionLocal };
 
         float hx = size.X * 0.5f, hy = size.Y * 0.5f, hz = size.Z * 0.5f;
 
-        // Cada cara con 4 vértices (quad) — orden para triangle fan
         // Z+
-        parte.Caras.Add(CaraQuad(
-            new Vector3(-hx, -hy, hz) + offset,
-            new Vector3(hx, -hy, hz) + offset,
-            new Vector3(hx, hy, hz) + offset,
-            new Vector3(-hx, hy, hz) + offset
+        parte.Poligonos.Add(Quad(
+            new Vector3(-hx, -hy, hz),
+            new Vector3(hx, -hy, hz),
+            new Vector3(hx, hy, hz),
+            new Vector3(-hx, hy, hz)
         ));
         // Z-
-        parte.Caras.Add(CaraQuad(
-            new Vector3(hx, -hy, -hz) + offset,
-            new Vector3(-hx, -hy, -hz) + offset,
-            new Vector3(-hx, hy, -hz) + offset,
-            new Vector3(hx, hy, -hz) + offset
+        parte.Poligonos.Add(Quad(
+            new Vector3(hx, -hy, -hz),
+            new Vector3(-hx, -hy, -hz),
+            new Vector3(-hx, hy, -hz),
+            new Vector3(hx, hy, -hz)
         ));
         // X+
-        parte.Caras.Add(CaraQuad(
-            new Vector3(hx, -hy, hz) + offset,
-            new Vector3(hx, -hy, -hz) + offset,
-            new Vector3(hx, hy, -hz) + offset,
-            new Vector3(hx, hy, hz) + offset
+        parte.Poligonos.Add(Quad(
+            new Vector3(hx, -hy, hz),
+            new Vector3(hx, -hy, -hz),
+            new Vector3(hx, hy, -hz),
+            new Vector3(hx, hy, hz)
         ));
         // X-
-        parte.Caras.Add(CaraQuad(
-            new Vector3(-hx, -hy, -hz) + offset,
-            new Vector3(-hx, -hy, hz) + offset,
-            new Vector3(-hx, hy, hz) + offset,
-            new Vector3(-hx, hy, -hz) + offset
+        parte.Poligonos.Add(Quad(
+            new Vector3(-hx, -hy, -hz),
+            new Vector3(-hx, -hy, hz),
+            new Vector3(-hx, hy, hz),
+            new Vector3(-hx, hy, -hz)
         ));
         // Y+
-        parte.Caras.Add(CaraQuad(
-            new Vector3(-hx, hy, hz) + offset,
-            new Vector3(hx, hy, hz) + offset,
-            new Vector3(hx, hy, -hz) + offset,
-            new Vector3(-hx, hy, -hz) + offset
+        parte.Poligonos.Add(Quad(
+            new Vector3(-hx, hy, hz),
+            new Vector3(hx, hy, hz),
+            new Vector3(hx, hy, -hz),
+            new Vector3(-hx, hy, -hz)
         ));
         // Y-
-        parte.Caras.Add(CaraQuad(
-            new Vector3(-hx, -hy, -hz) + offset,
-            new Vector3(hx, -hy, -hz) + offset,
-            new Vector3(hx, -hy, hz) + offset,
-            new Vector3(-hx, -hy, hz) + offset
+        parte.Poligonos.Add(Quad(
+            new Vector3(-hx, -hy, -hz),
+            new Vector3(hx, -hy, -hz),
+            new Vector3(hx, -hy, hz),
+            new Vector3(-hx, -hy, hz)
         ));
 
         return parte;
     }
 
-    private Cara CaraQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d)
+    private Poligono Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d)
     {
-        var cara = new Cara();
-        cara.Vertices.Add(new Vertice(new Punto(a)));
-        cara.Vertices.Add(new Vertice(new Punto(b)));
-        cara.Vertices.Add(new Vertice(new Punto(c)));
-        cara.Vertices.Add(new Vertice(new Punto(d)));
-        return cara;
+        var poly = new Poligono();
+        poly.Puntos.Add(new Punto(a));
+        poly.Puntos.Add(new Punto(b));
+        poly.Puntos.Add(new Punto(c));
+        poly.Puntos.Add(new Punto(d));
+        return poly;
     }
 
-    // ========= Input / cámara =========
+    // ====== Input / cámara ======
     protected override void OnUpdateFrame(FrameEventArgs args)
     {
         base.OnUpdateFrame(args);
@@ -239,24 +298,28 @@ public class VentanaPrincipal : GameWindow
 
         foreach (var obj in _objetos)
         {
+            // Model base del Objeto (solo translación global)
+            Matrix4 modelObj = Matrix4.CreateTranslation(obj.Posicion);
+
             foreach (var parte in obj.Partes)
             {
-                // model = parteLocal * objetoTransform (suficiente para esta práctica)
-                Matrix4 model = obj.Transform;
+                // Model = parte local * objeto global
+                Matrix4 model = Matrix4.CreateTranslation(parte.Posicion) * modelObj;
                 GL.UniformMatrix4(uModel, false, ref model);
                 GL.Uniform4(uColor, parte.Color);
 
-                foreach (var cara in parte.Caras)
+                foreach (var poly in parte.Poligonos)
                 {
-                    if (cara.Vertices.Count < 3) continue;
+                    if (poly.Puntos.Count < 3) continue;
 
-                    var v0 = cara.Vertices[0].P.Pos;
+                    // Triangulación tipo triangle fan (v0, v(i), v(i+1))
+                    var v0 = poly.Puntos[0].Pos;
                     List<float> data = new List<float>();
 
-                    for (int i = 1; i < cara.Vertices.Count - 1; i++)
+                    for (int i = 1; i < poly.Puntos.Count - 1; i++)
                     {
-                        var v1 = cara.Vertices[i].P.Pos;
-                        var v2 = cara.Vertices[i + 1].P.Pos;
+                        var v1 = poly.Puntos[i].Pos;
+                        var v2 = poly.Puntos[i + 1].Pos;
                         data.AddRange(new float[] { v0.X, v0.Y, v0.Z, v1.X, v1.Y, v1.Z, v2.X, v2.Y, v2.Z });
                     }
 
